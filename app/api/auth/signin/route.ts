@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 export async function POST(request: Request) {
   try {
     const { entityId } = await request.json();
+    console.log('Signin attempt with entityId:', entityId);
     
     if (!entityId) {
       return NextResponse.json(

@@ -10,6 +10,9 @@ import { Label } from "@/components/ui/label"
 import ReactMarkdown from 'react-markdown'
 import { WordRotate } from "../components/ui/word-rotate"
 
+// Check if we're in development/localhost environment
+const isDevelopment = process.env.NEXT_PUBLIC_NODE_ENV === 'development';
+
 export default function Home() {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -50,6 +53,10 @@ export default function Home() {
     };
 
     const handleSignIn = async () => {
+        if (!isDevelopment) {
+            alert('This application can only run on localhost:3000 in development mode.');
+            return;
+        }
         if (!entityId.trim()) {
             alert('Please enter an Entity ID');
             return;
@@ -95,6 +102,16 @@ export default function Home() {
     };
 
     useEffect(() => {
+        // Prevent app from running if not in development
+        if (!isDevelopment) {
+            setMessages([{
+                role: 'assistant',
+                content: "This application can only run on localhost:3000 in development mode.",
+                id: Date.now()
+            }]);
+            return;
+        }
+
         const pendingEntityId = localStorage.getItem('pendingEntityId');
         const storedEntityId = localStorage.getItem('signedInEntityId');
         const storedConnectedAccountId = localStorage.getItem('connectedAccountId');
@@ -144,10 +161,13 @@ export default function Home() {
     }, []);
 
     useEffect(() => {
+        if (!isDevelopment) return;
+
         let isSubscribed = true;
+        let timeoutId: NodeJS.Timeout;
 
         const setupTriggerListener = async () => {
-            if (!isListenMode) return;
+            if (!isListenMode || !connectedAccountId) return;
 
             try {
                 const response = await fetch('/api/trigger', {
@@ -169,7 +189,6 @@ export default function Home() {
                 
                 if (data.status === 'trigger_received' && isSubscribed) {
                     setLastTriggerTime(new Date());
-                    // Improved email formatting
                     const formattedContent = {
                         type: 'email',
                         emailData: {
@@ -185,23 +204,25 @@ export default function Home() {
                         id: Date.now() 
                     }]);
                     setIsListenMode(false);
-                } else if (data.status === 'timeout') {
+                } else if (data.status === 'timeout' && isSubscribed) {
                     console.log('Trigger listener timed out, restarting...');
-                    // Optionally restart the listener
-                    if (isListenMode && isSubscribed) {
-                        setupTriggerListener();
-                    }
+                    // Add delay before restarting to prevent rapid retries
+                    timeoutId = setTimeout(() => {
+                        if (isListenMode && isSubscribed) {
+                            setupTriggerListener();
+                        }
+                    }, 100000);
                 }
             } catch (error) {
                 console.error('Error setting up trigger listener:', error);
-                // Add user feedback for the error
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: `Failed to setup email listener: ${error.message}`,
-                    id: Date.now()
-                }]);
-                // Disable listen mode on error
-                setIsListenMode(false);
+                if (isSubscribed) {
+                    setMessages(prev => [...prev, {
+                        role: 'assistant',
+                        content: `Failed to setup email listener: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                        id: Date.now()
+                    }]);
+                    setIsListenMode(false);
+                }
             }
         };
 
@@ -211,12 +232,15 @@ export default function Home() {
 
         return () => {
             isSubscribed = false;
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
         };
     }, [isListenMode, connectedAccountId]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!input.trim()) return;
+        if (!isDevelopment || !input.trim()) return;
 
         const userMessage = { role: 'user', content: input, id: Date.now() };
         setMessages(prev => [...prev, userMessage]);
@@ -234,8 +258,9 @@ export default function Home() {
                         role, 
                         content: typeof content === 'string' ? content : JSON.stringify(content)
                     })),
-                    chatHistory: [], // We're already including the full history in messages
-                    listenMode: false
+                    chatHistory: [],
+                    listenMode: false,
+                    entityId: entityId
                 }),
             });
 
@@ -351,136 +376,144 @@ ${JSON.stringify(executionResult, null, 2)}
 
     return (
         <main className="flex flex-col h-screen overflow-hidden bg-black text-white">
-            <div className="flex flex-col h-full max-w-4xl w-full mx-auto px-4 pb-4">
-                {!isSignedIn ? (
-                    <div className="flex-grow flex flex-col justify-center items-center">
-                        <h1 className="text-4xl sm:text-5xl font-light mb-8">
-                            Your own Executive Assistant with{" "}
-                            <WordRotate
-                                words={["Gmail"]}
-                                className="text-gray-500 inline-block"
-                            />
-                        </h1>
-                        <div className="flex flex-col items-center space-y-4">
-                            <Input
-                                type="text"
-                                value={entityId}
-                                onChange={(e) => setEntityId(e.target.value)}
-                                placeholder="Enter your email address"
-                                className="w-64 mb-4 bg-zinc-900 text-white placeholder:text-gray-400"
-                            />
-                            <RainbowButton 
-                                onClick={handleSignIn} 
-                                className="text-xl px-8 py-4"
-                                disabled={isSigningIn || isCheckingAuth}
-                            >
-                                {isSigningIn ? 'Signing in...' : 
-                                 isCheckingAuth ? 'Checking Authorization...' : 
-                                 'Sign In'}
-                            </RainbowButton>
-                        </div>
-                    </div>
-                ) : (
-                    <>
-                        <header className="py-6 flex justify-between items-center">
-                            <h1 className="text-xl font-medium tracking-wider">EXECUTIVE ASSISTANT</h1>
-                            <div className="flex items-center space-x-4">
-                                <div className="flex items-center space-x-2">
-                                    <Label htmlFor="listen-mode" className="text-sm">
-                                        {isListenMode ? (
-                                            <div className="flex items-center space-x-1">
-                                                <RadioTower className="w-4 h-4 text-green-500" />
-                                                <span>Listening</span>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center space-x-1">
-                                                <Radio className="w-4 h-4" />
-                                                <span>Chat Mode</span>
-                                            </div>
-                                        )}
-                                    </Label>
-                                    <Switch
-                                        id="listen-mode"
-                                        checked={isListenMode}
-                                        onCheckedChange={setIsListenMode}
-                                    />
-                                </div>
-                                <button
-                                    onClick={handleLogout}
-                                    className="px-3 py-1 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-md transition-colors"
+            {!isDevelopment ? (
+                <div className="flex-grow flex flex-col justify-center items-center">
+                    <h1 className="text-2xl text-red-500">
+                        This application can only run on localhost:3000 in development mode.
+                    </h1>
+                </div>
+            ) : (
+                <div className="flex flex-col h-full max-w-4xl w-full mx-auto px-4 pb-4">
+                    {!isSignedIn ? (
+                        <div className="flex-grow flex flex-col justify-center items-center">
+                            <h1 className="text-4xl sm:text-5xl font-light mb-8">
+                                Your own Executive Assistant with{" "}
+                                <WordRotate
+                                    words={["Composio"]}
+                                    className="text-gray-500 inline-block"
+                                />
+                            </h1>
+                            <div className="flex flex-col items-center space-y-4">
+                                <Input
+                                    type="text"
+                                    value={entityId}
+                                    onChange={(e) => setEntityId(e.target.value)}
+                                    placeholder="Enter your email address"
+                                    className="w-64 mb-4 bg-zinc-900 text-white placeholder:text-gray-400"
+                                />
+                                <RainbowButton 
+                                    onClick={handleSignIn} 
+                                    className="text-xl px-8 py-4"
+                                    disabled={isSigningIn || isCheckingAuth}
                                 >
-                                    Logout
-                                </button>
+                                    {isSigningIn ? 'Signing in...' : 
+                                     isCheckingAuth ? 'Checking Authorization...' : 
+                                     'Sign In'}
+                                </RainbowButton>
                             </div>
-                        </header>
-
-                        {isListenMode ? (
-                            <div className="flex-grow flex flex-col justify-center items-center">
-                                <RadioTower className="w-16 h-16 text-green-500 animate-pulse" />
-                                <h2 className="text-2xl font-light mt-4">Listening to your Gmail</h2>
-                                {lastTriggerTime && (
-                                    <p className="text-sm text-gray-400 mt-2">
-                                        Last trigger received: {lastTriggerTime.toLocaleString()}
-                                    </p>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="flex flex-col flex-1 h-0">
-                                <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-6 mb-2 scrollbar-thin">
-                                    {messages.map((message) => (
-                                        <div
-                                            key={message.id}
-                                            className={`flex ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
-                                        >
-                                            <div
-                                                className={`max-w-[80%] py-4 px-4 text-sm rounded-lg relative overflow-hidden transition-all duration-200 hover:scale-[1.02] ${
-                                                    message.role === "user" 
-                                                        ? "bg-white text-black" 
-                                                        : "bg-zinc-800 text-gray-300"
-                                                }`}
-                                            >
-                                                {message.role === 'assistant' ? formatContent(message.content) : message.content}
-                                                <Meteors number={10} className="opacity-30" />
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {isLoading && (
-                                        <div className="flex justify-start">
-                                            <div className="max-w-[80%] py-4 px-4 text-sm rounded-lg relative bg-zinc-800 text-gray-300">
-                                                <div className="flex items-center space-x-2">
-                                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                    ) : (
+                        <>
+                            <header className="py-6 flex justify-between items-center">
+                                <h1 className="text-xl font-medium tracking-wider">EXECUTIVE ASSISTANT</h1>
+                                <div className="flex items-center space-x-4">
+                                    <div className="flex items-center space-x-2">
+                                        <Label htmlFor="listen-mode" className="text-sm">
+                                            {isListenMode ? (
+                                                <div className="flex items-center space-x-1">
+                                                    <RadioTower className="w-4 h-4 text-green-500" />
+                                                    <span>Listening</span>
                                                 </div>
-                                                <Meteors number={10} className="opacity-30" />
-                                            </div>
-                                        </div>
+                                            ) : (
+                                                <div className="flex items-center space-x-1">
+                                                    <Radio className="w-4 h-4" />
+                                                    <span>Chat Mode</span>
+                                                </div>
+                                            )}
+                                        </Label>
+                                        <Switch
+                                            id="listen-mode"
+                                            checked={isListenMode}
+                                            onCheckedChange={setIsListenMode}
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={handleLogout}
+                                        className="px-3 py-1 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-md transition-colors"
+                                    >
+                                        Logout
+                                    </button>
+                                </div>
+                            </header>
+
+                            {isListenMode ? (
+                                <div className="flex-grow flex flex-col justify-center items-center">
+                                    <RadioTower className="w-16 h-16 text-green-500 animate-pulse" />
+                                    <h2 className="text-2xl font-light mt-4">Listening to your Gmail</h2>
+                                    {lastTriggerTime && (
+                                        <p className="text-sm text-gray-400 mt-2">
+                                            Last trigger received: {lastTriggerTime.toLocaleString()}
+                                        </p>
                                     )}
                                 </div>
-
-                                <form onSubmit={handleSubmit} className="flex gap-2 pt-2 bg-black">
-                                    <div className="flex-1 relative">
-                                        <Input
-                                            value={input}
-                                            onChange={handleInputChange}
-                                            placeholder="Type your message here..."
-                                            className="flex-1 p-5 bg-zinc-900 text-white placeholder:text-gray-400 relative z-10"
-                                        />
-                                        <Meteors number={15} className="opacity-30" />
-                                    </div>
-                                    <RainbowButton type="submit" disabled={isLoading}>
-                                        {isLoading ? (
-                                            <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                                        ) : (
-                                            <Send className="w-4 h-4" />
+                            ) : (
+                                <div className="flex flex-col flex-1 h-0">
+                                    <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-6 mb-2 scrollbar-thin">
+                                        {messages.map((message) => (
+                                            <div
+                                                key={message.id}
+                                                className={`flex ${message.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
+                                            >
+                                                <div
+                                                    className={`max-w-[80%] py-4 px-4 text-sm rounded-lg relative overflow-hidden transition-all duration-200 hover:scale-[1.02] ${
+                                                        message.role === "user" 
+                                                            ? "bg-white text-black" 
+                                                            : "bg-zinc-800 text-gray-300"
+                                                    }`}
+                                                >
+                                                    {message.role === 'assistant' ? formatContent(message.content) : message.content}
+                                                    <Meteors number={10} className="opacity-30" />
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {isLoading && (
+                                            <div className="flex justify-start">
+                                                <div className="max-w-[80%] py-4 px-4 text-sm rounded-lg relative bg-zinc-800 text-gray-300">
+                                                    <div className="flex items-center space-x-2">
+                                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                                    </div>
+                                                    <Meteors number={10} className="opacity-30" />
+                                                </div>
+                                            </div>
                                         )}
-                                    </RainbowButton>
-                                </form>
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
+                                    </div>
+
+                                    <form onSubmit={handleSubmit} className="flex gap-2 pt-2 bg-black">
+                                        <div className="flex-1 relative">
+                                            <Input
+                                                value={input}
+                                                onChange={handleInputChange}
+                                                placeholder="Type your message here..."
+                                                className="flex-1 p-5 bg-zinc-900 text-white placeholder:text-gray-400 relative z-10"
+                                            />
+                                            <Meteors number={15} className="opacity-30" />
+                                        </div>
+                                        <RainbowButton type="submit" disabled={isLoading}>
+                                            {isLoading ? (
+                                                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                                            ) : (
+                                                <Send className="w-4 h-4" />
+                                            )}
+                                        </RainbowButton>
+                                    </form>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
         </main>
     )
 }

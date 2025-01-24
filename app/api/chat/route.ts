@@ -8,11 +8,12 @@ interface ChatRequest {
   messages: Array<{ role: string; content: string }>;
   trigger?: string; // Optional trigger event identifier
   chatHistory?: Array<{ role: string; content: string }>; // Added chatHistory to interface
+  entityId?: string;  // Add entityId to the interface
 }
 
 export async function POST(req: Request) {
   try {
-    const { messages, trigger, chatHistory = [] }: ChatRequest = await req.json();
+    const { messages, trigger, chatHistory = [], entityId }: ChatRequest = await req.json();
     const postProcessor: TPostProcessor = ({ actionName, appName, toolResponse }: {
       actionName: string;
       appName: string;
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
     // Setup toolset
     const toolset = new VercelAIToolSet({
       apiKey: process.env.COMPOSIO_API_KEY,
+      entityId: entityId
     });
 
     toolset.addPostProcessor(postProcessor);
@@ -57,11 +59,10 @@ export async function POST(req: Request) {
       return connection;
     }
 
-    async function executeAgent(entityName: string | undefined, inputMessages: any[], triggerEvent?: string) {
-      // setup entity
-      const entity = await toolset.client.getEntity(entityName);
+    async function executeAgent(inputMessages: any[], triggerEvent?: string) {
+      // Use the passed entityId instead of hardcoding "default"
+      const entity = await toolset.client.getEntity(entityId);
       await setupUserConnectionIfNotExists(entity.id);
-
 
       // Modify system prompt based on whether it's a trigger or user input
       const systemPrompt = triggerEvent
@@ -149,8 +150,8 @@ export async function POST(req: Request) {
       };
     }
 
-    // Execute agent with the trigger event if present
-    const result = await executeAgent("default", messages, trigger);
+    // Pass entityId to executeAgent instead of hardcoding "default"
+    const result = await executeAgent(messages, trigger);
 
     // Return structured response
     return NextResponse.json({

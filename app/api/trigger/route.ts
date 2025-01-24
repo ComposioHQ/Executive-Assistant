@@ -37,18 +37,7 @@ export async function POST(req: Request) {
       }, { status: 500 });
     }
 
-    // Setup the trigger listener with a timeout
-    try {
-      const entity = await toolset.client.getEntity("default");
-    } catch (entityError) {
-      console.error('Error getting entity:', entityError);
-      return NextResponse.json({
-        status: 'error',
-        message: 'Failed to get entity',
-        details: entityError instanceof Error ? entityError.message : 'Unknown entity error'
-      }, { status: 500 });
-    }
-    
+
     return new Promise((resolve, reject) => {
       // Add a timeout of 30 seconds
       const timeoutId = setTimeout(() => {
@@ -59,10 +48,13 @@ export async function POST(req: Request) {
       }, 30000); // 30 seconds timeout
 
       try {
-        toolset.triggers.subscribe(
+        // Store the subscription to be able to unsubscribe later
+        const subscription = toolset.triggers.subscribe(
           (data) => {
             clearTimeout(timeoutId);
             console.log('Trigger received:', data);
+            
+            
             resolve(NextResponse.json({
               status: 'trigger_received',
               subject: data.payload.subject,
@@ -75,6 +67,8 @@ export async function POST(req: Request) {
             onError: (error) => {
               clearTimeout(timeoutId);
               console.error('Subscription error:', error);
+              
+              
               resolve(NextResponse.json({
                 status: 'error',
                 message: 'Subscription error occurred',
