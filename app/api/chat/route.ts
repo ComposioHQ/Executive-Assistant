@@ -2,6 +2,7 @@ import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { ActionExecutionResDto, TPostProcessor, VercelAIToolSet } from 'composio-core';
 import { NextResponse } from "next/server";
+import { groq } from "@ai-sdk/groq";
 
 // Define interface for the request body
 interface ChatRequest {
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
 
       // Generate AI response with full context
       const aiResponse = await generateText({
-        model: openai("gpt-4o"),
+        model: openai("gpt-4o"), //groq("llama-3.3-70b-versatile")
         tools,
         toolChoice: "auto",
         system: systemPrompt,

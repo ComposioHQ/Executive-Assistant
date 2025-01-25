@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ai-sdk/groq": "^1.1.2",
     "@ai-sdk/openai": "^0.0.36",
     "@radix-ui/react-label": "^2.1.1",
     "@radix-ui/react-switch": "^1.1.2",
