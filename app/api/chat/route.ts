@@ -112,7 +112,7 @@ export async function POST(req: Request) {
       console.log("AI Response:", aiResponse);
 
       const { text } = await generateText({
-        model: openai('gpt-4o'),
+        model: groq("deepseek-r1-distill-llama-70b"),
         prompt: finalResult
           ? `
           Given the context of the user's request "${inputMessages[inputMessages.length - 1].content}", analyze the AI's response: "${aiResponse.text} and tool result: ${finalResult}". 
