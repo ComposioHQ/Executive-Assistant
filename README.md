@@ -11,7 +11,7 @@ This is an AI Agent built using Composio and Vercel, it is a personal assistant 
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/composio-ai/executive-assistant.git
+git clone https://github.com/ComposioHQ/Executive-Assistant.git
 cd Executive-Assistant
 ```
 
