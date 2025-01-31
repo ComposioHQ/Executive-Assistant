@@ -26,14 +26,15 @@ pnpm install
 
 3. Set up environment variables:
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-Edit `.env.local` and add your required environment variables:
+Edit `.env` and add your required environment variables:
 ```
 NEXT_PUBLIC_COMPOSIO_API_KEY=your_api_key
 NEXT_PUBLIC_GROQ_API_KEY=your_api_key
 NEXT_PUBLIC_OPENAI_API_KEY=your_api_key
+NEXT_PUBLIC_NODE_ENV=development
 # Add other environment variables here
 ```
 
